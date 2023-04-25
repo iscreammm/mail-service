@@ -1,56 +1,60 @@
 package com.iscreamm.mailservice.service;
 
+import com.iscreamm.mailservice.security.config.MailSenderConfig;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.io.IOException;
 
 @Service
 public class MailSenderService {
     private final JavaMailSender javaMailSender;
-
-    @Value(value = "${spring.mail.username}")
-    private String username;
+    private final MailSenderConfig mailSenderConfig;
 
     @Autowired
-    public MailSenderService(JavaMailSender javaMailSender) {
+    public MailSenderService(JavaMailSender javaMailSender, MailSenderConfig mailSenderConfig) {
         this.javaMailSender = javaMailSender;
+        this.mailSenderConfig = mailSenderConfig;
     }
 
     public void send(String data) throws MessagingException, JSONException, IOException {
         JSONObject jsonObject = new JSONObject(data);
 
-        String emailTo = jsonObject.getString("emailTo");
+        JSONArray emails = jsonObject.getJSONArray("emailTo");
         String subject = jsonObject.getString("subject");
         String message = jsonObject.getString("message");
 
-        if (!emailTo.contains("@")) {
-            throw new IOException("Email need to contain '@'");
+        for (int i = 0; i < emails.length(); i++) {
+            String emailTo = emails.getString(i);
 
-        } else if ((subject.length() == 0) || (message.length() == 0)) {
-            throw new IOException("Subject and message can't be empty");
+            if (!emailTo.contains("@")) {
+                throw new IOException("Email need to contain '@'");
 
-        } else {
-            MimeMessage mimeMessage = javaMailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
+            } else if ((subject.length() == 0) || (message.length() == 0)) {
+                throw new IOException("Subject and message can't be empty");
 
-            message += "<br>"
-                    + "<br>"
-                    + "Provided by <a href=\"https://github.com/iscreammm\"> iscreamm </a>";
+            } else {
+                MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "utf-8");
 
-            helper.setText(message, true);
-            helper.setTo(emailTo);
-            helper.setSubject(subject);
-            helper.setFrom(username);
+                String additionalText = "<br>"
+                        + "<br>"
+                        + "Provided by <a href=\"https://github.com/iscreammm\"> iscreamm </a>";
 
-            javaMailSender.send(mimeMessage);
+                helper.setText(message + additionalText, true);
+                helper.setTo(emailTo);
+                helper.setSubject(subject);
+                helper.setFrom(mailSenderConfig.getUsername());
+
+                javaMailSender.send(mimeMessage);
+            }
         }
     }
 }
