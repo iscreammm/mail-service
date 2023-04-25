@@ -2,6 +2,7 @@ package com.iscreamm.mailservice.service;
 
 import com.iscreamm.mailservice.model.User;
 import com.iscreamm.mailservice.repository.UserRepository;
+import com.iscreamm.mailservice.security.config.JedisConfig;
 import com.iscreamm.mailservice.security.jwt.JwtUtils;
 import com.iscreamm.mailservice.utils.JwtResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,10 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.params.ScanParams;
+import redis.clients.jedis.resps.ScanResult;
 
 import java.io.IOException;
 
@@ -20,13 +25,15 @@ public class UserService implements UserDetailsService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
+    private final JedisPool jedisPool;
 
     @Autowired
-    public UserService(UserRepository userRepository,
-                       PasswordEncoder passwordEncoder, JwtUtils jwtUtils) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                       JwtUtils jwtUtils, JedisConfig jedisConfig) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtils = jwtUtils;
+        this.jedisPool = new JedisPool(jedisConfig.getHost(), jedisConfig.getPort());
     }
 
     public void addUser(String data) throws IOException, JSONException {
@@ -66,24 +73,54 @@ public class UserService implements UserDetailsService {
             throw new IOException("Password isn't correct");
         }
 
-        String token = getToken(user);
+        String accessToken = jwtUtils.generateJwtAccessToken(user);
+        String refreshToken = jwtUtils.generateJwtRefreshToken(user);
 
-        return new JwtResponse(token).toString();
+        updatePair(refreshToken, username);
+
+        return new JwtResponse(accessToken, refreshToken).toString();
     }
 
-    public String getToken(User user) {
-        String token;
+    public String refreshToken(String token) throws IOException {
+        String username = null;
 
-        if (user.getToken() == null) {
-            token = jwtUtils.generateJwtAccessToken(user);
+        jwtUtils.validateJwtRefreshToken(token);
 
-            user.setToken(token);
-            userRepository.save(user);
-        } else {
-            token = user.getToken();
+        try(Jedis jedis = jedisPool.getResource()) {
+            username = jedis.get(token);
         }
 
-        return token;
+        if (username == null) {
+            throw new IOException("Invalid token!");
+        }
+
+        User user = userRepository.findByUsername(username);
+
+        String accessToken = jwtUtils.generateJwtAccessToken(user);
+        String refreshToken = jwtUtils.generateJwtRefreshToken(user);
+
+        updatePair(refreshToken, username);
+
+        return new JwtResponse(accessToken, refreshToken).toString();
+    }
+
+    public void updatePair(String refreshToken, String username) {
+        String cursor = "0";
+        ScanParams scanParams = new ScanParams().count(1);
+
+        try(Jedis jedis = jedisPool.getResource()) {
+            do {
+                ScanResult<String> scanResult = jedis.scan(cursor, scanParams);
+
+                if ((scanResult.getResult().size() != 0) && jedis.get(scanResult.getResult().get(0)).equals(username)) {
+                    jedis.del(scanResult.getResult().get(0));
+                }
+
+                cursor = scanResult.getCursor();
+            } while (!"0".equals(cursor));
+
+            jedis.set(refreshToken, username);
+        }
     }
 
     public User getUser(String username) throws UsernameNotFoundException {

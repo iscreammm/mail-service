@@ -6,9 +6,11 @@ import com.google.gson.GsonBuilder;
 public class JwtResponse {
     private final String token;
     private final String type = "Bearer";
+    private final String refreshToken;
 
-    public JwtResponse(String token) {
+    public JwtResponse(String token, String refreshToken) {
         this.token = token;
+        this.refreshToken = refreshToken;
     }
 
     @Override

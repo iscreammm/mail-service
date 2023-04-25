@@ -4,7 +4,9 @@ import com.iscreamm.mailservice.service.UserService;
 import com.iscreamm.mailservice.utils.Message;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.configurationprocessor.json.JSONException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -21,16 +23,23 @@ public class AuthenticationController {
     }
 
     @PostMapping(path = "/auth", consumes="application/json")
-    public String registerUser(@RequestBody String data) throws JSONException, IOException {
+    public ResponseEntity<String> registerUser(@RequestBody String data) throws JSONException, IOException {
         userService.addUser(data);
 
-        return (new Message<>(true, "", 1)).toString();
+        return new ResponseEntity<>((new Message<>(true, "", 1)).toString(), HttpStatus.OK);
     }
 
     @GetMapping(path = "/auth", consumes="application/json")
-    public String loginUser(@RequestBody String data) throws JSONException, IOException {
+    public ResponseEntity<String> loginUser(@RequestBody String data) throws JSONException, IOException {
         String userData = userService.auth(data);
 
-        return (new Message<>(true, "", userData)).toString();
+        return new ResponseEntity<>((new Message<>(true, "", userData)).toString(), HttpStatus.OK);
+    }
+
+    @GetMapping(path = "/refresh/{token}")
+    public ResponseEntity<String> refreshToken(@PathVariable String token) throws IOException {
+        String data = userService.refreshToken(token);
+
+        return new ResponseEntity<>((new Message<>(true, "", data)).toString(), HttpStatus.OK);
     }
 }

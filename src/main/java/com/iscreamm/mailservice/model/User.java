@@ -21,9 +21,6 @@ public class User implements UserDetails {
     @Column(name = "password", length = 60, nullable = false)
     private String password;
 
-    @Column(name = "token", unique = true)
-    private String token;
-
     public User() {}
 
     public User(String username, String password) {
@@ -35,16 +32,12 @@ public class User implements UserDetails {
         return username;
     }
 
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
     public void setPassword(String password) {
         this.password = password;
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
     }
 
     @Override
@@ -65,10 +58,6 @@ public class User implements UserDetails {
     @Override
     public boolean isEnabled() {
         return true;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
     }
 
     @Override
